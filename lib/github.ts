@@ -2,7 +2,7 @@ import type { ArchitectureEdge, ArchitectureNode, FileNode, RepoMetadata } from 
 
 const GITHUB_API_BASE = "https://api.github.com";
 
-function getAuthHeaders() {
+function getAuthHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN;
   return token
     ? {
@@ -15,7 +15,7 @@ export async function fetchRepoMetadata(owner: string, repo: string): Promise<Re
   const res = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}`, {
     headers: {
       Accept: "application/vnd.github+json",
-      ...(getAuthHeaders() as Record<string, string>)
+      ...getAuthHeaders()
     },
     next: { revalidate: 60 }
   });
@@ -41,7 +41,7 @@ export async function fetchLanguages(owner: string, repo: string): Promise<strin
   const res = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/languages`, {
     headers: {
       Accept: "application/vnd.github+json",
-      ...(getAuthHeaders() as Record<string, string>)
+      ...getAuthHeaders()
     },
     next: { revalidate: 300 }
   });
@@ -62,7 +62,7 @@ export async function fetchRepoTree(owner: string, repo: string): Promise<FileNo
     {
       headers: {
         Accept: "application/vnd.github+json",
-        ...(getAuthHeaders() as Record<string, string>)
+        ...getAuthHeaders()
       },
       next: { revalidate: 300 }
     }
