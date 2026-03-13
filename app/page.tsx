@@ -34,7 +34,7 @@ export default function LandingPage() {
   } | null>(null);
 
   const { topLevelFolders, topLevelFiles } = (() => {
-    if (!result) return [];
+    if (!result) return { topLevelFolders: [], topLevelFiles: [] };
     const folders = new Set<string>();
     const files = new Set<string>();
     for (const path of result.fileTree) {
