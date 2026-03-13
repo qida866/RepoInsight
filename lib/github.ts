@@ -15,7 +15,7 @@ export async function fetchRepoMetadata(owner: string, repo: string): Promise<Re
   const res = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}`, {
     headers: {
       Accept: "application/vnd.github+json",
-      ...getAuthHeaders()
+      ...(getAuthHeaders() as Record<string, string>)
     },
     next: { revalidate: 60 }
   });
@@ -41,7 +41,7 @@ export async function fetchLanguages(owner: string, repo: string): Promise<strin
   const res = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/languages`, {
     headers: {
       Accept: "application/vnd.github+json",
-      ...getAuthHeaders()
+      ...(getAuthHeaders() as Record<string, string>)
     },
     next: { revalidate: 300 }
   });
@@ -62,7 +62,7 @@ export async function fetchRepoTree(owner: string, repo: string): Promise<FileNo
     {
       headers: {
         Accept: "application/vnd.github+json",
-        ...getAuthHeaders()
+        ...(getAuthHeaders() as Record<string, string>)
       },
       next: { revalidate: 300 }
     }
@@ -80,11 +80,17 @@ export async function fetchRepoTree(owner: string, repo: string): Promise<FileNo
   for (const item of tree) {
     const segments = item.path.split("/");
     let current = root;
+
     for (let i = 0; i < segments.length; i++) {
       const part = segments[i]!;
       if (!current.children) current.children = [];
+
       const isLast = i === segments.length - 1;
-      const existing = current.children.find((c) => c.path === (current.path ? `${current.path}/${part}` : part));
+
+      const existing = current.children.find(
+        (c) => c.path === (current.path ? `${current.path}/${part}` : part)
+      );
+
       if (existing) {
         current = existing;
       } else {
@@ -93,6 +99,7 @@ export async function fetchRepoTree(owner: string, repo: string): Promise<FileNo
           type: isLast && item.type === "blob" ? "file" : "dir",
           children: isLast && item.type === "blob" ? undefined : []
         };
+
         current.children.push(node);
         current = node;
       }
@@ -121,15 +128,19 @@ export function deriveArchitectureFromTree(tree: FileNode[]): {
 
     if (node.type === "dir") {
       addNode(id, name + "/");
+
       node.children?.forEach((child) => {
         const childId = child.path;
         const childName = child.path.split("/").pop() ?? child.path;
+
         addNode(childId, childName + (child.type === "dir" ? "/" : ""));
+
         edges.push({
           id: `${id}->${childId}`,
           source: id,
           target: childId
         });
+
         traverse(child);
       });
     } else {
@@ -141,4 +152,3 @@ export function deriveArchitectureFromTree(tree: FileNode[]): {
 
   return { nodes, edges };
 }
-
