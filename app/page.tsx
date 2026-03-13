@@ -2,6 +2,23 @@
 
 import { FormEvent, useState } from "react";
 
+/** API response shape from POST /api/analyze when called with { url } */
+interface AnalyzeResult {
+  name: string;
+  description: string | null;
+  stars: number;
+  language: string | null;
+  fileTree: string[];
+  summary: string;
+  explanation: string;
+  learningPath: string[];
+}
+
+interface TopLevelStructure {
+  topLevelFolders: string[];
+  topLevelFiles: string[];
+}
+
 function parseGithubUrl(input: string): { owner: string; repo: string } | null {
   try {
     const url = new URL(input.trim());
@@ -22,43 +39,26 @@ export default function LandingPage() {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{
-    name: string;
-    description: string | null;
-    stars: number;
-    language: string | null;
-    fileTree: string[];
-    summary: string;
-    explanation: string;
-    learningPath: string[];
-  } | null>(null);
+  const [result, setResult] = useState<AnalyzeResult | null>(null);
 
-  const { topLevelFolders, topLevelFiles } = (() => {
-
-    if (!result) {
-      return {
-        topLevelFolders: [],
-        topLevelFiles: []
-      };
-    }
-  
+  const { topLevelFolders, topLevelFiles }: TopLevelStructure = ((): TopLevelStructure => {
     const folders = new Set<string>();
     const files = new Set<string>();
-  
-    for (const path of result.fileTree) {
+    const fileTree = result?.fileTree ?? [];
+
+    for (const path of fileTree) {
       const parts = path.split("/");
       if (parts.length > 1) {
-        folders.add(parts[0]);
+        folders.add(parts[0]!);
       } else if (parts.length === 1) {
-        files.add(parts[0]);
+        files.add(parts[0]!);
       }
     }
-  
+
     return {
       topLevelFolders: Array.from(folders).sort(),
       topLevelFiles: Array.from(files).sort()
     };
-  
   })();
 
   const onSubmit = (e: FormEvent) => {
@@ -92,16 +92,7 @@ export default function LandingPage() {
           }
           throw new Error(message);
         }
-        const json = (await res.json()) as {
-          name: string;
-          description: string | null;
-          stars: number;
-          language: string | null;
-          fileTree: string[];
-          summary: string;
-          explanation: string;
-          learningPath: string[];
-        };
+        const json = (await res.json()) as AnalyzeResult;
         setResult(json);
       } catch (err) {
         setError(
