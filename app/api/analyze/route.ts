@@ -28,11 +28,14 @@ export async function POST(req: NextRequest) {
           fileTree: result.fileTree.slice(0, 80)
         });
         return NextResponse.json({
+          owner: result.owner,
+          repo: result.repo,
           name: result.repoSummary.name,
           description: result.repoSummary.description,
           stars: result.repoSummary.stars,
           language: result.repoSummary.language,
           fileTree: result.fileTree,
+          techStack: result.techStack,
           summary: ai.summary,
           explanation: ai.explanation,
           learningPath: ai.learningPath

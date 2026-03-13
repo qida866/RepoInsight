@@ -17,6 +17,32 @@ export interface RepoAnalyzerOutput {
   repoSummary: RepoSummary;
   techStack: string[];
   fileTree: string[];
+  owner: string;
+  repo: string;
+}
+
+// ReactFlow-compatible dependency graph types
+export interface DependencyNode {
+  id: string;
+  data: { label: string };
+}
+
+export interface DependencyEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface DependencyGraph {
+  nodes: DependencyNode[];
+  edges: DependencyEdge[];
+}
+
+export interface RepoIntelligence {
+  techStack: string[];
+  entrypoints: string[];
+  architecture: string[];
+  dependencyGraph: DependencyGraph;
 }
 
 function parseGithubUrl(input: string): ParsedRepo | null {
@@ -60,52 +86,344 @@ async function fetchFileTree(owner: string, repo: string): Promise<string[]> {
     .sort();
 }
 
-function detectTechStack(files: string[]): string[] {
+export function detectTechStack(
+  repoFiles: string[],
+  packageJson?: string | null
+): string[] {
   const techs = new Set<string>();
 
   const hasFile = (name: string) =>
-    files.some((p) => p.toLowerCase().endsWith(name.toLowerCase()));
+    repoFiles.some((p) => p.toLowerCase().endsWith(name.toLowerCase()));
 
+  // Language/platform hints from common files
   if (hasFile("package.json")) {
     techs.add("JavaScript");
     techs.add("Node.js");
   }
-  if (hasFile("requirements.txt")) {
-    techs.add("Python");
-  }
-  if (hasFile("go.mod")) {
-    techs.add("Go");
-  }
-  if (hasFile("pom.xml")) {
-    techs.add("Java");
+  if (hasFile("requirements.txt")) techs.add("Python");
+  if (hasFile("go.mod")) techs.add("Go");
+  if (hasFile("pom.xml")) techs.add("Java");
+
+  // Parse package.json dependencies/devDependencies when available
+  if (packageJson) {
+    try {
+      const pkg = JSON.parse(packageJson) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      const depNames = new Set(
+        Object.keys(pkg.dependencies ?? {}).concat(
+          Object.keys(pkg.devDependencies ?? {})
+        ).map((d) => d.toLowerCase())
+      );
+
+      const hasDep = (name: string | string[]) => {
+        if (Array.isArray(name)) {
+          return name.some((n) => depNames.has(n.toLowerCase()));
+        }
+        return depNames.has(name.toLowerCase());
+      };
+
+      // Frameworks
+      if (hasDep(["react", "react-dom"])) techs.add("React");
+      if (hasDep("next")) techs.add("Next.js");
+      if (hasDep("vue") || hasDep("vue-router")) techs.add("Vue");
+      if (hasDep("@angular/core") || hasDep("@angular/cli")) techs.add("Angular");
+      if (hasDep("express")) techs.add("Express");
+      if (hasDep("django")) techs.add("Django");
+      if (hasDep("fastapi")) techs.add("FastAPI");
+      if (
+        hasDep("spring-boot") ||
+        hasDep("@nestjs/core") || // often used for Spring-like architectures
+        hasDep("spring")
+      ) {
+        techs.add("Spring");
+      }
+
+      // Tooling
+      if (hasDep("tailwindcss")) techs.add("Tailwind CSS");
+      if (hasDep(["@prisma/client", "prisma"])) techs.add("Prisma");
+      if (hasDep(["@reduxjs/toolkit", "redux", "react-redux"])) techs.add("Redux");
+      if (hasDep("vite")) techs.add("Vite");
+      if (hasDep("webpack")) techs.add("Webpack");
+    } catch {
+      // ignore malformed package.json, fall back to path heuristics below
+    }
   }
 
-  const allContent = files.join("\n").toLowerCase();
+  const allPaths = repoFiles.join("\n").toLowerCase();
 
-  if (allContent.includes("next.config") || allContent.includes("next/")) {
+  // Path-based heuristics (supports cases where package.json isn't available)
+  if (allPaths.includes("next.config") || allPaths.includes("next/")) {
     techs.add("Next.js");
     techs.add("React");
-  } else if (allContent.includes("react")) {
+  } else if (allPaths.includes("react")) {
     techs.add("React");
   }
 
-  if (allContent.includes("express")) {
-    techs.add("Express");
-  }
-
-  if (allContent.includes("django")) {
-    techs.add("Django");
-  }
-
-  if (allContent.includes("flask")) {
-    techs.add("Flask");
-  }
-
-  if (allContent.includes("spring-boot") || allContent.includes("springframework")) {
+  if (allPaths.includes("express")) techs.add("Express");
+  if (allPaths.includes("django")) techs.add("Django");
+  if (allPaths.includes("fastapi")) techs.add("FastAPI");
+  if (allPaths.includes("tailwind.config")) techs.add("Tailwind CSS");
+  if (allPaths.includes("prisma/")) techs.add("Prisma");
+  if (allPaths.includes("redux")) techs.add("Redux");
+  if (allPaths.includes("vite.config")) techs.add("Vite");
+  if (allPaths.includes("webpack.config")) techs.add("Webpack");
+  if (allPaths.includes("spring-boot") || allPaths.includes("springframework")) {
     techs.add("Spring");
   }
 
   return Array.from(techs);
+}
+
+export function detectEntrypoints(fileTree: string[]): string[] {
+  const entries = new Set<string>();
+  const has = (path: string) =>
+    fileTree.some((p) => p.toLowerCase() === path.toLowerCase());
+
+  // Typical TS/JS entry files
+  [
+    "index.ts",
+    "index.tsx",
+    "index.js",
+    "main.ts",
+    "main.tsx",
+    "main.js",
+    "app.tsx",
+    "app.ts",
+    "app.js"
+  ].forEach((p) => {
+    if (has(p)) entries.add(p);
+  });
+
+  // Node / server entrypoints
+  ["server.ts", "server.js", "src/server.ts", "src/server.js"].forEach((p) => {
+    if (has(p)) entries.add(p);
+  });
+
+  // Python entrypoints
+  ["main.py", "app.py"].forEach((p) => {
+    if (has(p)) entries.add(p);
+  });
+
+  // CLI-style entrypoints
+  ["cli.ts", "cli.js"].forEach((p) => {
+    if (has(p)) entries.add(p);
+  });
+
+  // bin/* executables
+  fileTree
+    .filter((p) => p.startsWith("bin/") || p.includes("/bin/"))
+    .forEach((p) => entries.add(p));
+
+  return Array.from(entries);
+}
+
+export function inferArchitecture(fileTree: string[]): string[] {
+  const lower = fileTree.map((p) => p.toLowerCase());
+  const hasAny = (predicates: ((p: string) => boolean)[]) =>
+    lower.some((p) => predicates.some((fn) => fn(p)));
+
+  const modules = new Set<string>();
+
+  // Frontend: typical web UI folders/files
+  if (
+    hasAny([
+      (p) => p.startsWith("app/"),
+      (p) => p.startsWith("pages/"),
+      (p) => p.startsWith("src/components"),
+      (p) => p.includes("components/"),
+      (p) => p.includes("ui/"),
+      (p) => p.endsWith(".tsx"),
+      (p) => p.endsWith(".jsx")
+    ])
+  ) {
+    modules.add("frontend");
+  }
+
+  // API: HTTP routing / controllers
+  if (
+    hasAny([
+      (p) => p.includes("/api/"),
+      (p) => p.startsWith("app/api"),
+      (p) => p.startsWith("pages/api"),
+      (p) => p.includes("controllers/"),
+      (p) => p.includes("routes/"),
+      (p) => p.includes("router/"),
+      (p) => p.endsWith("router.ts") || p.endsWith("router.js")
+    ])
+  ) {
+    modules.add("api");
+  }
+
+  // Backend / service layer
+  if (
+    hasAny([
+      (p) => p.includes("server/"),
+      (p) => p.includes("backend/"),
+      (p) => p.includes("services/"),
+      (p) => p.includes("usecase"),
+      (p) => p.includes("domain/"),
+      (p) => p.includes("handlers/"),
+      (p) => p.includes("application/")
+    ])
+  ) {
+    modules.add("backend");
+  }
+
+  // Database / persistence
+  if (
+    hasAny([
+      (p) => p.includes("prisma/"),
+      (p) => p.includes("migrations/"),
+      (p) => p.includes("entities/"),
+      (p) => p.includes("repositories/"),
+      (p) => p.includes("models/"),
+      (p) => p.includes("db/"),
+      (p) => p.endsWith(".sql")
+    ])
+  ) {
+    modules.add("database");
+  }
+
+  // Utilities / shared helpers
+  if (
+    hasAny([
+      (p) => p.includes("utils/"),
+      (p) => p.includes("lib/"),
+      (p) => p.includes("helpers/"),
+      (p) => p.includes("shared/")
+    ])
+  ) {
+    modules.add("utils");
+  }
+
+  // Assets: static assets and public files
+  if (
+    hasAny([
+      (p) => p.startsWith("public/"),
+      (p) => p.startsWith("static/"),
+      (p) => p.includes("/assets/"),
+      (p) => p.includes("/images/"),
+      (p) => p.includes("/icons/"),
+      (p) => p.endsWith(".css"),
+      (p) => p.endsWith(".scss"),
+      (p) => p.endsWith(".png"),
+      (p) => p.endsWith(".jpg"),
+      (p) => p.endsWith(".jpeg"),
+      (p) => p.endsWith(".svg")
+    ])
+  ) {
+    modules.add("assets");
+  }
+
+  // Config: configuration and environment
+  if (
+    hasAny([
+      (p) => p.startsWith("config/"),
+      (p) => p.includes("/config/"),
+      (p) => p.endsWith(".config.ts"),
+      (p) => p.endsWith(".config.js"),
+      (p) => p.endsWith(".config.cjs"),
+      (p) => p.endsWith(".config.mjs"),
+      (p) => p.endsWith("config.yml") || p.endsWith("config.yaml"),
+      (p) => p.endsWith(".env") || p.includes(".env.")
+    ])
+  ) {
+    modules.add("config");
+  }
+
+  // Background workers / jobs / queues
+  if (
+    hasAny([
+      (p) => p.includes("workers/"),
+      (p) => p.includes("jobs/"),
+      (p) => p.includes("queues/"),
+      (p) => p.includes("cron/"),
+      (p) => p.endsWith(".worker.ts") || p.endsWith(".worker.js")
+    ])
+  ) {
+    modules.add("workers");
+  }
+
+  if (modules.size === 0) {
+    modules.add("monolith");
+  }
+
+  return Array.from(modules);
+}
+
+export function buildDependencyGraph(
+  fileContents: Record<string, string>
+): DependencyGraph {
+  const nodes: DependencyNode[] = [];
+  const edges: DependencyEdge[] = [];
+
+  const addNode = (id: string) => {
+    if (!nodes.find((n) => n.id === id)) {
+      nodes.push({ id, data: { label: id } });
+    }
+  };
+
+  const filePaths = Object.keys(fileContents);
+  const pathSet = new Set(filePaths);
+
+  const importRegex =
+    /import\s+[^"']*?from\s+['"]([^'";]+)['"];?|require\(['"]([^'";]+)['"]\)|from\s+['"]([^'";]+)['"]/g;
+
+  for (const path of filePaths) {
+    const content = fileContents[path] ?? "";
+    addNode(path);
+
+    const matches = content.matchAll(importRegex);
+    for (const match of matches) {
+      const spec = (match[1] || match[2] || match[3] || "").trim();
+      if (!spec) continue;
+
+      if (spec.startsWith(".") || spec.startsWith("/")) {
+        let target = spec;
+        if (!target.startsWith("/")) {
+          const segments = path.split("/");
+          segments.pop();
+          target = segments.join("/") + "/" + spec;
+        }
+
+        const normalized = target
+          .replace(/\/+/g, "/")
+          .replace(/\/\.\//g, "/");
+
+        const candidate =
+          Array.from(pathSet).find((p) => p.endsWith(normalized)) ?? normalized;
+
+        addNode(candidate);
+        edges.push({
+          id: `${path}->${candidate}`,
+          source: path,
+          target: candidate
+        });
+      }
+    }
+  }
+
+  return { nodes, edges };
+}
+
+export function buildRepoIntelligence(params: {
+  fileTree: string[];
+  packageJson?: string | null;
+  fileContents?: Record<string, string>;
+}): RepoIntelligence {
+  const techStack = detectTechStack(params.fileTree, params.packageJson);
+  const entrypoints = detectEntrypoints(params.fileTree);
+  const architecture = inferArchitecture(params.fileTree);
+  const dependencyGraph = buildDependencyGraph(params.fileContents ?? {});
+
+  return {
+    techStack,
+    entrypoints,
+    architecture,
+    dependencyGraph
+  };
 }
 
 export async function analyzeGithubRepository(
@@ -138,7 +456,9 @@ export async function analyzeGithubRepository(
   return {
     repoSummary,
     techStack,
-    fileTree
+    fileTree,
+    owner,
+    repo
   };
 }
 
