@@ -86,12 +86,14 @@ export default function DemoRunner({
         return;
       }
       const template = getSandpackTemplate(mode, framework, fileTree);
-      setPreviewData({
-        mode,
-        template,
-        files,
-      });
-      setPreviewOpen(true);
+      if (mode === "frontend" || mode === "static") {
+        setPreviewData({
+          mode,
+          template,
+          files,
+        });
+        setPreviewOpen(true);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load demo");
     } finally {
