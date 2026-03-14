@@ -21,7 +21,46 @@ import {
 export type { DemoMode, DemoModeResult, FrameworkRuntime };
 export { getDemoMode };
 
-export { loadRepoFiles } from "@/lib/repoFileLoader";
+import { toSandpackFiles } from "@/lib/repoFileLoader";
+
+const FILES_API = "/api/files";
+
+export interface LoadRepoFilesParams {
+  owner: string;
+  repo: string;
+  paths: string[];
+}
+
+export interface LoadRepoFilesResult {
+  files: Record<string, string>;
+  error?: string;
+}
+
+export async function loadRepoFiles(
+  params: LoadRepoFilesParams
+): Promise<LoadRepoFilesResult> {
+  const { owner, repo, paths } = params;
+  try {
+    const res = await fetch(FILES_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, paths }),
+    });
+    const data = (await res.json()) as { files?: Record<string, string>; error?: string };
+    if (!res.ok || data.error) {
+      return {
+        files: {},
+        error: data.error ?? "Failed to load repo files",
+      };
+    }
+    const rawFiles = data.files ?? {};
+    const files = toSandpackFiles(rawFiles);
+    return { files };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to load repo files";
+    return { files: {}, error: message };
+  }
+}
 
 /** Frontend runtimes that use Sandpack in-browser preview. */
 export type FrontendRuntime = "next" | "vite" | "react" | "vue";
