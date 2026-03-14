@@ -21,7 +21,6 @@ import {
 export type { DemoMode, DemoModeResult, FrameworkRuntime };
 export { getDemoMode };
 
-export type { LoadRepoFilesParams, LoadRepoFilesResult } from "@/lib/repoFileLoader";
 export { loadRepoFiles } from "@/lib/repoFileLoader";
 
 /** Frontend runtimes that use Sandpack in-browser preview. */
