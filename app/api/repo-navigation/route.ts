@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     try {
       const parsed = JSON.parse(text) as { sections?: NavSection[] };
       const sections = (parsed.sections ?? [])
-        .filter((s): s is NavSection => s.id && s.label && Array.isArray(s.paths))
+        .filter((s): s is NavSection => Boolean(s.id && s.label && Array.isArray(s.paths)))
         .map((s) => ({
           ...s,
           paths: s.paths.filter((p) => pathSet.has(p.toLowerCase()))
