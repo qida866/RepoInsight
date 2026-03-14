@@ -38,7 +38,7 @@ function scoreDocumentation(fileTree: string[]): number {
 function scoreStructure(fileTree: string[]): number {
   const paths = fileTree.map(lower);
   let s = 0;
-  if (paths.some((p) => p === "package.json" || p === "requirements.txt" || p === "cargo.toml" || p === "go.mod"))) s += 0.5;
+  if (paths.some((p) => p === "package.json" || p === "requirements.txt" || p === "cargo.toml" || p === "go.mod")) s += 0.5;
   if (paths.some((p) => p.includes("tsconfig") || p.includes("vite.config") || p.includes("next.config") || p.includes("webpack"))) s += 0.5;
   if (paths.some((p) => p.startsWith("src/") || p.startsWith("app/") || p.startsWith("lib/") || p === "src")) s += 0.5;
   return Math.min(s, 1.5);
