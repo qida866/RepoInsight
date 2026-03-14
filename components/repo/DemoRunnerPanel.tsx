@@ -1,69 +1,59 @@
-import type React from "react";
+"use client";
 
-interface DemoRunnerPanelProps {
-  fileTree: string[];
-  techStack: string[];
-}
+import { useMemo, useState } from "react";
+import {
+  getDemoMode,
+  loadRepoFiles,
+  pickPathsForDemo,
+  getSandpackTemplate,
+  isRunnableInBrowser,
+  type SandpackTemplateId,
+} from "@/lib/demoEngine";
+import type { FrameworkRuntime } from "@/lib/frameworkDetector";
 
 function hasPathEnding(fileTree: string[], ending: string): boolean {
   const lowerEnding = ending.toLowerCase();
   return fileTree.some((p) => p.toLowerCase().endsWith(lowerEnding));
 }
 
+interface DemoRunnerPanelProps {
+  owner: string;
+  repo: string;
+  fileTree: string[];
+  techStack: string[];
+  onOpenSandpack: (data: { template: SandpackTemplateId; files: Record<string, string> }) => void;
+}
+
 export default function DemoRunnerPanel({
+  owner,
+  repo,
   fileTree,
-  techStack
-}: DemoRunnerPanelProps): React.JSX.Element {
-  const lowerTree = fileTree.map((p) => p.toLowerCase());
-  const hasAny = (predicates: ((p: string) => boolean)[]) =>
-    lowerTree.some((p) => predicates.some((fn) => fn(p)));
+  techStack,
+  onOpenSandpack
+}: DemoRunnerPanelProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { mode, framework, label: frameworkLabel } = useMemo(
+    () => getDemoMode({ fileTree, techStack }),
+    [fileTree, techStack]
+  );
 
   const hasPackageJson = hasPathEnding(fileTree, "package.json");
-  const hasViteConfig = hasAny([(p) => p.includes("vite.config")]);
-  const hasNextConfig = hasAny([(p) => p.includes("next.config")]);
-  const hasNodeServer = hasAny([
-    (p) => p.endsWith("/server.js"),
-    (p) => p === "server.js"
-  ]);
-  const hasNodeIndex = hasAny([
-    (p) => p.endsWith("/index.js"),
-    (p) => p === "index.js"
-  ]);
   const hasRequirements = hasPathEnding(fileTree, "requirements.txt");
   const hasPyproject = hasPathEnding(fileTree, "pyproject.toml");
-  const hasPythonEntrypoint = hasAny([
-    (p) => p.endsWith("main.py"),
-    (p) => p.endsWith("app.py")
-  ]);
-
-  const hasTech = (name: string) =>
-    techStack.some((t) => t.toLowerCase() === name.toLowerCase());
-
-  type Runtime =
-    | "next"
-    | "vite"
-    | "react"
-    | "node-server"
-    | "python"
-    | "unknown";
-
-  let runtime: Runtime = "unknown";
-
-  if (hasTech("Next.js") || hasNextConfig) {
-    runtime = "next";
-  } else if (hasTech("Vite") || hasViteConfig) {
-    runtime = "vite";
-  } else if (hasTech("React") && hasPackageJson) {
-    runtime = "react";
-  } else if (hasNodeServer || hasNodeIndex) {
-    runtime = "node-server";
-  } else if (hasRequirements || hasPyproject || hasPythonEntrypoint) {
-    runtime = "python";
-  }
+  const hasNodeServer = fileTree.some(
+    (p) => p.toLowerCase().endsWith("/server.js") || p.toLowerCase() === "server.js"
+  );
+  const hasPythonEntrypoint = fileTree.some(
+    (p) => p.toLowerCase().endsWith("main.py") || p.toLowerCase().endsWith("app.py")
+  );
 
   const runInstructions: string[] = [];
   const requiredCommands: string[] = [];
   const setupSteps: string[] = [];
+
+  const runtime: FrameworkRuntime = framework;
 
   switch (runtime) {
     case "next":
@@ -76,7 +66,8 @@ export default function DemoRunnerPanel({
       );
       break;
     case "vite":
-      runInstructions.push("Run the Vite-powered React dev server.");
+    case "vue":
+      runInstructions.push(runtime === "vue" ? "Run the Vite-powered Vue dev server." : "Run the Vite-powered React dev server.");
       requiredCommands.push("npm install", "npm run dev");
       setupSteps.push(
         "Install Node.js and a package manager (npm, pnpm, or yarn).",
@@ -92,6 +83,11 @@ export default function DemoRunnerPanel({
         "Run `npm install` to install dependencies.",
         "Run `npm start` (or the equivalent script in package.json) to launch the dev server."
       );
+      break;
+    case "static":
+      runInstructions.push("Open index.html in a browser or use a static server.");
+      requiredCommands.push("npx serve .  # or open index.html");
+      setupSteps.push("Open index.html directly or run a static file server (e.g. npx serve).");
       break;
     case "node-server":
       runInstructions.push("Start the Node.js HTTP server entrypoint.");
@@ -134,30 +130,55 @@ export default function DemoRunnerPanel({
       break;
   }
 
+  const canRun = isRunnableInBrowser(mode);
+
+  const handleRunDemo = async () => {
+    if (!canRun) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const paths = pickPathsForDemo(mode, framework, fileTree);
+      const { files, error: loadError } = await loadRepoFiles({ owner, repo, paths });
+      if (loadError) {
+        setError(loadError);
+        return;
+      }
+      const template = getSandpackTemplate(mode, framework, fileTree);
+      onOpenSandpack({ template, files });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load demo");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <section className="glass-panel border-slate-800/80 p-4 transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_18px_40px_rgba(15,23,42,0.85)]">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Demo runner
         </h2>
+        {canRun && (
+          <button
+            type="button"
+            onClick={handleRunDemo}
+            disabled={loading}
+            className="rounded-lg border border-emerald-700 bg-emerald-900/60 px-3 py-1.5 text-[11px] font-medium text-emerald-300 hover:bg-emerald-800/60 disabled:opacity-50"
+          >
+            {loading ? "Loading…" : "Run Demo"}
+          </button>
+        )}
       </div>
+      {error && (
+        <p className="mb-2 text-[11px] text-red-400">{error}</p>
+      )}
       <div className="grid gap-3 md:grid-cols-3 text-xs text-slate-200">
         <div>
           <div className="mb-1 text-[11px] font-medium text-slate-300">
             Detected runtime
           </div>
           <p className="text-[11px] text-slate-100">
-            {runtime === "next"
-              ? "Next.js application"
-              : runtime === "vite"
-              ? "Vite-powered React app"
-              : runtime === "react"
-              ? "React SPA"
-              : runtime === "node-server"
-              ? "Node.js server"
-              : runtime === "python"
-              ? "Python application"
-              : "Not clearly detectable from the current tree"}
+            {frameworkLabel}
           </p>
         </div>
         <div>
@@ -192,4 +213,3 @@ export default function DemoRunnerPanel({
     </section>
   );
 }
-

@@ -353,11 +353,55 @@ export function inferArchitecture(fileTree: string[]): string[] {
   return Array.from(modules);
 }
 
+/** Resolve a relative import spec (e.g. '../api/client', './service') against the file path. */
+function resolveRelativePath(spec: string, fromFilePath: string): string {
+  const dir = fromFilePath.includes("/") ? fromFilePath.replace(/\/[^/]+$/, "") : "";
+  const parts = spec.split("/").filter(Boolean);
+  const stack = dir ? dir.split("/") : [];
+
+  for (const p of parts) {
+    if (p === ".") continue;
+    if (p === "..") {
+      stack.pop();
+      continue;
+    }
+    stack.push(p);
+  }
+
+  return stack.join("/");
+}
+
+/** Find a file in pathSet that matches the resolved path (with or without extension). */
+function resolveToFile(
+  resolved: string,
+  pathSet: Set<string>
+): string | null {
+  const lowerResolved = resolved.toLowerCase();
+  const candidates = [
+    resolved,
+    ...["", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].map((ext) => resolved + ext),
+    ...["/index.ts", "/index.tsx", "/index.js", "/index.jsx"].map((suffix) => resolved + suffix)
+  ];
+
+  for (const c of candidates) {
+    const found = Array.from(pathSet).find((p) => p === c || p.toLowerCase() === c.toLowerCase());
+    if (found) return found;
+  }
+  const byEnd = Array.from(pathSet).find((p) => p === resolved || p.endsWith("/" + resolved));
+  if (byEnd) return byEnd;
+  const byEndExt = Array.from(pathSet).find((p) => {
+    const r = resolved.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/i, "");
+    return p === r || p.endsWith("/" + r) || p.endsWith(r + ".ts") || p.endsWith(r + ".tsx") || p.endsWith(r + ".js") || p.endsWith(r + ".jsx");
+  });
+  return byEndExt ?? null;
+}
+
 export function buildDependencyGraph(
   fileContents: Record<string, string>
 ): DependencyGraph {
   const nodes: DependencyNode[] = [];
   const edges: DependencyEdge[] = [];
+  const edgeSet = new Set<string>();
 
   const addNode = (id: string) => {
     if (!nodes.find((n) => n.id === id)) {
@@ -368,8 +412,9 @@ export function buildDependencyGraph(
   const filePaths = Object.keys(fileContents);
   const pathSet = new Set(filePaths);
 
+  // import x from './path' | import 'path' | require('path') | export ... from 'path' | dynamic import('path')
   const importRegex =
-    /import\s+[^"']*?from\s+['"]([^'";]+)['"];?|require\(['"]([^'";]+)['"]\)|from\s+['"]([^'";]+)['"]/g;
+    /(?:import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)(?:\s*,\s*(?:\{[^}]*\}|\*\s+as\s+\w+|\w+))*\s+from\s+)?|export\s+(?:\{[^}]*\}|\*)\s+from\s+|import\s*\(\s*)['"]([^'";]+)['"]|require\s*\(\s*['"]([^'";]+)['"]\s*\)/g;
 
   for (const path of filePaths) {
     const content = fileContents[path] ?? "";
@@ -377,30 +422,24 @@ export function buildDependencyGraph(
 
     const matches = content.matchAll(importRegex);
     for (const match of matches) {
-      const spec = (match[1] || match[2] || match[3] || "").trim();
-      if (!spec) continue;
+      const spec = (match[1] ?? match[2] ?? "").trim();
+      if (!spec || spec.startsWith("http") || spec.startsWith("node:") || spec.startsWith("react") || spec.startsWith("next")) continue;
 
       if (spec.startsWith(".") || spec.startsWith("/")) {
-        let target = spec;
-        if (!target.startsWith("/")) {
-          const segments = path.split("/");
-          segments.pop();
-          target = segments.join("/") + "/" + spec;
+        const resolved = resolveRelativePath(spec, path);
+        const candidate = resolveToFile(resolved, pathSet);
+        const targetId = candidate ?? resolved;
+
+        addNode(targetId);
+        const edgeKey = `${path}->${targetId}`;
+        if (!edgeSet.has(edgeKey)) {
+          edgeSet.add(edgeKey);
+          edges.push({
+            id: edgeKey,
+            source: path,
+            target: targetId
+          });
         }
-
-        const normalized = target
-          .replace(/\/+/g, "/")
-          .replace(/\/\.\//g, "/");
-
-        const candidate =
-          Array.from(pathSet).find((p) => p.endsWith(normalized)) ?? normalized;
-
-        addNode(candidate);
-        edges.push({
-          id: `${path}->${candidate}`,
-          source: path,
-          target: candidate
-        });
       }
     }
   }

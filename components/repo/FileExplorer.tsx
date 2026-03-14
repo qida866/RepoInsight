@@ -6,12 +6,15 @@ import type { FileNode } from "@/types/repo";
 interface FileExplorerProps {
   tree: FileNode[];
   selectedPath?: string | null;
+  /** Paths to highlight (e.g. from Repo Navigator section click). */
+  highlightedPaths?: string[] | null;
   onSelectFile?: (path: string) => void;
 }
 
 export default function FileExplorer({
   tree,
   selectedPath,
+  highlightedPaths,
   onSelectFile
 }: FileExplorerProps) {
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
@@ -35,6 +38,10 @@ export default function FileExplorer({
     const nodeId = node.path || name;
     const isOpen = isDir && openFolders.has(nodeId);
     const isActive = !isDir && selectedPath && selectedPath === node.path;
+    const isHighlighted =
+      !isDir &&
+      highlightedPaths?.length &&
+      highlightedPaths.some((hp) => hp === node.path);
 
     return (
       <div key={nodeId}>
@@ -51,6 +58,8 @@ export default function FileExplorer({
             "flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs transition-colors",
             isActive
               ? "bg-slate-800 text-slate-50"
+              : isHighlighted
+              ? "bg-sky-500/15 text-sky-100 border-l-2 border-sky-500"
               : "text-slate-200 hover:bg-slate-800/60"
           ].join(" ")}
         >

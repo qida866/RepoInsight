@@ -11,6 +11,7 @@
   "dependencies": {
     "@codesandbox/sandpack-react": "^2.20.0",
     "@xyflow/react": "^12.0.0",
+    "html-to-image": "^1.11.13",
     "next": "14.2.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -20,10 +20,23 @@ interface DependencyGraph {
 interface RepoGraphProps {
   tree: FileNode[];
   dependencyGraph?: DependencyGraph;
+  /** Paths to highlight in the dependency graph (e.g. from ArchitectureMap layer selection). */
+  highlightedNodeIds?: string[] | null;
+  /** Called when user clicks a node in the dependency graph; syncs with ArchitectureMap. */
+  onNodeClick?: (nodeId: string) => void;
 }
 
-export default function RepoGraph({ tree, dependencyGraph }: RepoGraphProps) {
+export default function RepoGraph({
+  tree,
+  dependencyGraph,
+  highlightedNodeIds = null,
+  onNodeClick,
+}: RepoGraphProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const highlightSet = useMemo(
+    () => (highlightedNodeIds?.length ? new Set(highlightedNodeIds) : null),
+    [highlightedNodeIds]
+  );
 
   const { nodes, edges } = useMemo(() => {
     const flowNodes: Node[] = [];
@@ -38,8 +51,8 @@ export default function RepoGraph({ tree, dependencyGraph }: RepoGraphProps) {
           id: n.id,
           data: {
             label: (
-              <span className="text-[11px] font-mono text-slate-100 truncate">
-                {n.id}
+              <span className="truncate font-mono text-[11px] text-slate-100" title={n.id}>
+                {n.id.split("/").pop() ?? n.id}
               </span>
             )
           },
@@ -244,36 +257,73 @@ export default function RepoGraph({ tree, dependencyGraph }: RepoGraphProps) {
     return { nodes: flowNodes, edges: flowEdges };
   }, [tree, dependencyGraph]);
 
+  const relatedNodeIds = useMemo(() => {
+    if (!selectedId || !dependencyGraph) return null;
+    const set = new Set<string>([selectedId]);
+    for (const e of dependencyGraph.edges) {
+      if (e.source === selectedId) set.add(e.target);
+      if (e.target === selectedId) set.add(e.source);
+    }
+    return set;
+  }, [selectedId, dependencyGraph]);
+
+  const isEdgeHighlight = (e: Edge) =>
+    !!relatedNodeIds && (e.source === selectedId || e.target === selectedId);
+  const isNodeHighlight = (n: Node) =>
+    !relatedNodeIds || relatedNodeIds.has(n.id);
+  const isLayerHighlighted = (nodeId: string) => !!highlightSet?.has(nodeId);
+
   return (
-    <div className="h-[420px] w-full rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden">
+    <div className="relative h-[420px] w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+      {dependencyGraph && dependencyGraph.nodes.length > 0 && (
+        <div className="absolute left-3 top-3 z-10 rounded border border-slate-700 bg-slate-900/95 px-2 py-1 text-[10px] text-slate-400">
+          Click a node to highlight its dependencies (imports) and dependents
+        </div>
+      )}
       <ReactFlow
-        nodes={nodes.map((n) => ({
-          ...n,
-          style: {
-            ...(n.style || {}),
-            border:
-              selectedId && n.id === selectedId
-                ? "1px solid rgba(56,189,248,1)"
-                : n.style?.border
-          }
-        }))}
+        nodes={nodes.map((n) => {
+          const selected = selectedId && n.id === selectedId;
+          const inLayer = isLayerHighlighted(n.id);
+          return {
+            ...n,
+            style: {
+              ...(n.style || {}),
+              opacity: isNodeHighlight(n) ? 1 : 0.35,
+              border:
+                selected
+                  ? "2px solid rgba(56,189,248,1)"
+                  : inLayer
+                    ? "2px solid rgba(52,211,153,0.85)"
+                    : isNodeHighlight(n)
+                      ? n.style?.border
+                      : "1px solid rgba(100,116,139,0.5)",
+              background:
+                selected
+                  ? "rgba(15,23,42,0.98)"
+                  : inLayer
+                    ? "rgba(6,78,59,0.35)"
+                    : n.style?.background,
+              boxShadow: inLayer && !selected ? "0 0 0 1px rgba(52,211,153,0.3)" : undefined,
+            },
+          };
+        })}
         edges={edges.map((e) => ({
           ...e,
           style: {
             ...(e.style || {}),
+            opacity: isEdgeHighlight(e) ? 1 : 0.25,
             stroke:
-              selectedId &&
-              (e.source === selectedId || e.target === selectedId)
+              isEdgeHighlight(e)
                 ? "rgba(56,189,248,1)"
                 : e.style?.stroke ?? "rgba(56,189,248,0.9)",
-            strokeWidth:
-              selectedId &&
-              (e.source === selectedId || e.target === selectedId)
-                ? 2
-                : e.style?.strokeWidth ?? 1.4
+            strokeWidth: isEdgeHighlight(e) ? 2.2 : 1.2
           }
         }))}
-        onNodeClick={(_, node) => setSelectedId(node.id)}
+        onNodeClick={(_, node) => {
+          setSelectedId((prev) => (prev === node.id ? null : node.id));
+          onNodeClick?.(node.id);
+        }}
+        onPaneClick={() => setSelectedId(null)}
         className="w-full h-full dark-theme"
         fitView
         fitViewOptions={{ padding: 0.15 }}

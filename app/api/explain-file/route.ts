@@ -5,11 +5,12 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const { path, code, repoName, learnMode } = (await req.json()) as {
+    const { path, code, repoName, learnMode, intelligenceMode } = (await req.json()) as {
       path?: string;
       code?: string;
       repoName?: string;
       learnMode?: boolean;
+      intelligenceMode?: boolean;
     };
 
     if (!code) {
@@ -30,6 +31,17 @@ export async function POST(req: NextRequest) {
           { status: 200 }
         );
       }
+      if (intelligenceMode) {
+        return NextResponse.json(
+          {
+            purpose: "Configure CLAUDE_API_KEY to get an AI explanation of this file’s purpose.",
+            mainFunctions: "—",
+            dependencies: "—",
+            architectureRole: "—"
+          },
+          { status: 200 }
+        );
+      }
       return NextResponse.json(
         {
           summary:
@@ -44,6 +56,7 @@ export async function POST(req: NextRequest) {
     }
 
     const useLearnPrompt = !!learnMode;
+    const useIntelligencePrompt = !!intelligenceMode && !useLearnPrompt;
 
     const systemPrompt = useLearnPrompt
       ? "You are a friendly coding tutor helping a beginner understand a source file.\n" +
@@ -52,6 +65,13 @@ export async function POST(req: NextRequest) {
         "- keyConcepts: 2–4 short bullet points explaining the main ideas or patterns in this file (e.g. “React hooks”, “API route handler”, “database model”).\n" +
         "- architectureRole: 1–2 sentences on how this file fits in the bigger picture (e.g. “This is the API layer that the frontend calls” or “This defines the data shape used by the services”).\n" +
         "- learnNext: 1–2 concrete suggestions for what to read or try next to understand the codebase (e.g. “Open the service that imports this” or “Read the README section on authentication”)."
+      : useIntelligencePrompt
+      ? "You are an AI code reviewer in a repository understanding tool.\n" +
+        "Given a single source file, explain it. You MUST respond in JSON with keys: purpose, mainFunctions, dependencies, architectureRole.\n" +
+        "- purpose: 2–3 sentences on what this file is for and the role it plays in the codebase.\n" +
+        "- mainFunctions: short bullet-style description of the main functions, components, classes, or exports in this file.\n" +
+        "- dependencies: what this file imports (modules, packages, local files) and what might depend on it; list key imports and dependents if obvious from the code.\n" +
+        "- architectureRole: how this file fits in the architecture (e.g. API layer, service, UI component, data model, config)."
       : "You are an AI code reviewer in a repository understanding tool.\n" +
         "Given a single source file, explain it to a senior engineer. You MUST respond in JSON with keys: summary, purpose, mainFunctions, connections.\n" +
         "- summary: one-sentence description of what this file does.\n" +
@@ -101,6 +121,13 @@ export async function POST(req: NextRequest) {
           keyConcepts: "—",
           architectureRole: "—",
           learnNext: "Try opening another file or re-run the explanation."
+        };
+      } else if (useIntelligencePrompt) {
+        parsed = {
+          purpose: text.slice(0, 400) || "Could not parse explanation.",
+          mainFunctions: "—",
+          dependencies: "—",
+          architectureRole: "—"
         };
       } else {
         parsed = {
