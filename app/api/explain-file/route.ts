@@ -66,12 +66,12 @@ export async function POST(req: NextRequest) {
         "- architectureRole: 1–2 sentences on how this file fits in the bigger picture (e.g. “This is the API layer that the frontend calls” or “This defines the data shape used by the services”).\n" +
         "- learnNext: 1–2 concrete suggestions for what to read or try next to understand the codebase (e.g. “Open the service that imports this” or “Read the README section on authentication”)."
       : useIntelligencePrompt
-      ? "You are an AI code reviewer in a repository understanding tool.\n" +
-        "Given a single source file, explain it. You MUST respond in JSON with keys: purpose, mainFunctions, dependencies, architectureRole.\n" +
-        "- purpose: 2–3 sentences on what this file is for and the role it plays in the codebase.\n" +
-        "- mainFunctions: short bullet-style description of the main functions, components, classes, or exports in this file.\n" +
-        "- dependencies: what this file imports (modules, packages, local files) and what might depend on it; list key imports and dependents if obvious from the code.\n" +
-        "- architectureRole: how this file fits in the architecture (e.g. API layer, service, UI component, data model, config)."
+      ? "You are an expert at analyzing source code for repository navigation.\n" +
+        "Given a file path and its contents, produce a structured explanation. Respond ONLY with valid JSON with exactly these keys: purpose, mainFunctions, dependencies, architectureRole.\n\n" +
+        "- purpose: 2–4 sentences on what this file is for: its primary responsibility and why it exists in the codebase.\n" +
+        "- mainFunctions: bullet-style list of the main functions, components, classes, or exports (name and one-line description each). Be specific.\n" +
+        "- dependencies: key imports (external packages and notable local modules) and, if evident, what might depend on this file.\n" +
+        "- architectureRole: how this file fits in the architecture (e.g. API route handler, service layer, UI component, data model, config, middleware). One or two sentences."
       : "You are an AI code reviewer in a repository understanding tool.\n" +
         "Given a single source file, explain it to a senior engineer. You MUST respond in JSON with keys: summary, purpose, mainFunctions, connections.\n" +
         "- summary: one-sentence description of what this file does.\n" +
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-3-5-sonnet-20241022",
-        max_tokens: 600,
+        max_tokens: useIntelligencePrompt ? 1200 : 600,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }]
       })

@@ -5,16 +5,20 @@ interface RepoChatRequestBody {
   question: string;
   name: string;
   description: string | null;
+  summary?: string | null;
   techStack: string[];
   fileTree: string[];
+  architectureLayers?: string[];
   entrypoints?: string[];
+  importantFolders?: string[];
+  importantFiles?: string[];
   fileContents?: Record<string, string>;
 }
 
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as RepoChatRequestBody;
-    const { question, name, description, techStack, fileTree, entrypoints, fileContents } = body;
+    const { question, name, description, summary, techStack, fileTree, architectureLayers, entrypoints, importantFolders, importantFiles, fileContents } = body;
 
     if (!question || !question.trim()) {
       return NextResponse.json(
@@ -170,19 +174,18 @@ export async function POST(req: Request) {
           "\nSkim the README and main entry files to understand how this repo is structured.";
       }
 
-      return NextResponse.json({ answer });
+      return NextResponse.json({ answer, referencedFiles: [], architectureContext: null });
     }
 
     // Claude-backed answer when API key is available
     const systemPrompt =
       "You are Repo Copilot, an AI assistant that answers questions about a GitHub repository.\n" +
-      "You are given: repository name and description, tech stack, file tree sample, optional entry points, and optional file contents (e.g. package.json, README).\n" +
-      "Answer using ONLY this context and common conventions. Use repo metadata, file tree, tech stack, entry points, and file content to give precise, helpful answers.\n" +
-      "- Prefer short, direct answers (3–6 sentences) with concrete file or folder references.\n" +
-      "- For “how do I run”, use package.json scripts if provided; otherwise point to README or entry files.\n" +
-      "- For “where is the API”, use the file tree (e.g. app/api, pages/api, routes/, controllers/).\n" +
-      "- For architecture, describe entry points, main modules, and how they connect.\n" +
-      "- If something is not knowable from the context, say so and suggest where to look.";
+      "You are given: repository name, description, summary, tech stack, file tree sample, architecture layers, entry points, and optional file contents.\n" +
+      "Answer using ONLY this context. Give precise, helpful answers with concrete file or folder references.\n" +
+      "At the end of your reply you MUST add exactly two lines (no extra text after):\n" +
+      "REFERENCED_FILES: path1, path2, path3\n" +
+      "ARCHITECTURE_CONTEXT: one short sentence about how this fits the repo architecture.\n" +
+      "List only file paths that appear in the file tree (use exact paths). If no specific files, use REFERENCED_FILES: (none).";
 
     const fileContentsBlock =
       fileContents && Object.keys(fileContents).length > 0
@@ -193,13 +196,24 @@ export async function POST(req: Request) {
         : "";
     const entrypointsBlock =
       entrypoints?.length ? `\nEntry points: ${entrypoints.join(", ")}` : "";
+    const summaryBlock = summary?.trim() ? `\nRepo summary: ${summary}` : "";
+    const layersBlock =
+      architectureLayers?.length ? `\nArchitecture layers: ${architectureLayers.join(", ")}` : "";
+    const importantFoldersBlock =
+      importantFolders?.length ? `\nImportant folders: ${importantFolders.join(", ")}` : "";
+    const importantFilesBlock =
+      importantFiles?.length ? `\nImportant files: ${importantFiles.slice(0, 35).join(", ")}` : "";
 
     const userPrompt = [
       `Question: ${question}`,
       `Repository: ${name}`,
       description ? `Description: ${description}` : null,
+      summaryBlock,
       techLine,
+      layersBlock,
       entrypointsBlock,
+      importantFoldersBlock,
+      importantFilesBlock,
       "File tree sample:",
       treeSample,
       fileContentsBlock
@@ -208,18 +222,18 @@ export async function POST(req: Request) {
       .join("\n");
 
     const res = await fetch(CLAUDE_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 400,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }]
-    })
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }]
+      })
     });
 
     if (!res.ok) {
@@ -235,9 +249,37 @@ export async function POST(req: Request) {
     }
 
     const json = (await res.json()) as any;
-    const answer: string = json.content?.[0]?.text ?? "";
+    let raw: string = json.content?.[0]?.text ?? "";
 
-    return NextResponse.json({ answer: answer.trim() });
+    const fileTreeSet = new Set(fileTree.map((p) => p.toLowerCase()));
+    let referencedFiles: string[] = [];
+    let architectureContext: string | null = null;
+
+    const refIdx = raw.indexOf("\nREFERENCED_FILES:");
+    if (refIdx !== -1) {
+      const suffix = raw.slice(refIdx);
+      raw = raw.slice(0, refIdx).trim();
+      const refLine = suffix.match(/REFERENCED_FILES:\s*([\s\S]*?)(?=\nARCHITECTURE_CONTEXT:|$)/);
+      if (refLine) {
+        const list = refLine[1]!.replace(/\n/g, " ").trim();
+        if (list && list !== "(none)") {
+          referencedFiles = list
+            .split(",")
+            .map((p) => p.trim())
+            .filter((p) => p && fileTreeSet.has(p.toLowerCase()));
+        }
+      }
+      const archLine = suffix.match(/ARCHITECTURE_CONTEXT:\s*(.+?)(?=\n|$)/s);
+      if (archLine) architectureContext = archLine[1]!.trim();
+    }
+
+    const answer = raw.trim();
+
+    return NextResponse.json({
+      answer,
+      referencedFiles,
+      architectureContext
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

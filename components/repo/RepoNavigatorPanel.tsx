@@ -18,73 +18,121 @@ interface RepoNavigatorPanelProps {
   onHighlightFiles?: (paths: string[]) => void;
 }
 
+const NAV_SECTION_ORDER = [
+  "start-here",
+  "core-modules",
+  "api",
+  "auth",
+  "database",
+  "config"
+] as const;
+
 function heuristicSections(fileTree: string[], lower: string[]): NavSection[] {
+  const getPaths = (pred: (lp: string) => boolean) =>
+    fileTree.filter((_, i) => pred(lower[i]!));
+
+  const startHere = getPaths(
+    (lp) =>
+      lp === "readme.md" ||
+      lp.endsWith("/readme.md") ||
+      lp.endsWith("/package.json") ||
+      lp === "app/page.tsx" ||
+      lp === "app/page.js" ||
+      lp === "src/main.tsx" ||
+      lp === "src/main.js" ||
+      lp === "src/index.tsx" ||
+      lp === "src/index.js" ||
+      lp === "pages/index.tsx" ||
+      lp === "pages/index.js"
+  );
+  const coreModules = getPaths(
+    (lp) =>
+      (lp.startsWith("src/") || lp.startsWith("app/") || lp.startsWith("pages/") || lp.startsWith("lib/") || lp.startsWith("backend/") || lp.startsWith("server/")) &&
+      !lp.startsWith("app/api") &&
+      !lp.startsWith("pages/api") &&
+      !lp.includes("/api/")
+  ).filter((p) => !startHere.includes(p));
+  const apiLayer = getPaths(
+    (lp) =>
+      lp.startsWith("app/api") ||
+      lp.startsWith("pages/api") ||
+      lp.startsWith("api/") ||
+      lp.includes("/api/") ||
+      lp.includes("/routes/")
+  );
+  const auth = getPaths(
+    (lp) =>
+      lp.includes("auth") ||
+      lp.includes("/middleware") ||
+      lp.includes("jwt") ||
+      lp.includes("session")
+  );
+  const database = getPaths(
+    (lp) =>
+      lp.includes("/models/") ||
+      lp.includes("/db/") ||
+      lp.includes("database") ||
+      lp.includes("prisma/") ||
+      lp.includes("/schema")
+  );
+  const config = getPaths(
+    (lp) =>
+      lp.includes("/config/") ||
+      lp.endsWith(".env") ||
+      lp.includes(".env.") ||
+      lp.includes("settings")
+  );
+
   const sections: NavSection[] = [
-    {
-      id: "overview",
-      label: "Overview",
-      description: "High-level entry files and docs.",
-      paths: fileTree.filter((p, i) => {
-        const lp = lower[i]!;
-        return lp === "readme.md" || lp.endsWith("/readme.md") || lp.endsWith("/package.json");
-      })
-    },
-    {
-      id: "architecture",
-      label: "Architecture",
-      description: "Top-level structure and main code areas.",
-      paths: fileTree.filter((p, i) => {
-        const lp = lower[i]!;
-        return lp.startsWith("src/") || lp.startsWith("app/") || lp.startsWith("pages/") || lp.startsWith("backend/") || lp.startsWith("server/");
-      })
-    },
-    {
-      id: "key-modules",
-      label: "Key Modules",
-      description: "Important feature and domain folders.",
-      paths: fileTree.filter((p, i) => {
-        const lp = lower[i]!;
-        return lp.includes("/components/") || lp.startsWith("components/") || lp.includes("/services/") || lp.startsWith("services/") || lp.includes("/features/");
-      })
-    },
-    {
-      id: "api",
-      label: "API Layer",
-      description: "Routes, controllers, and HTTP handlers.",
-      paths: fileTree.filter((p, i) => {
-        const lp = lower[i]!;
-        return lp.startsWith("app/api") || lp.startsWith("pages/api") || lp.startsWith("api/") || lp.includes("/api/") || lp.includes("/routes/");
-      })
-    },
-    {
-      id: "data",
-      label: "Data Layer",
-      description: "Models, database, and persistence code.",
-      paths: fileTree.filter((p, i) => {
-        const lp = lower[i]!;
-        return lp.includes("/models/") || lp.includes("/db/") || lp.includes("database") || lp.includes("prisma/");
-      })
-    },
-    {
-      id: "auth",
-      label: "Authentication",
-      description: "Auth flows, sessions, and guards.",
-      paths: fileTree.filter((p, i) => {
-        const lp = lower[i]!;
-        return lp.includes("auth") || lp.includes("/middleware") || lp.includes("jwt") || lp.includes("session");
-      })
-    },
-    {
-      id: "config",
-      label: "Configuration",
-      description: "Settings, config files, and environments.",
-      paths: fileTree.filter((p, i) => {
-        const lp = lower[i]!;
-        return lp.includes("/config/") || lp.endsWith(".env") || lp.includes(".env.") || lp.includes("settings");
-      })
-    }
+    { id: "start-here", label: "Start Here", description: "Entry points and docs.", paths: startHere },
+    { id: "core-modules", label: "Core Modules", description: "App structure and features.", paths: coreModules },
+    { id: "api", label: "API Layer", description: "Routes and HTTP handlers.", paths: apiLayer },
+    { id: "auth", label: "Authentication", description: "Auth and sessions.", paths: auth },
+    { id: "database", label: "Database", description: "Models and persistence.", paths: database },
+    { id: "config", label: "Configuration", description: "Config and env.", paths: config }
   ];
   return sections.filter((s) => s.paths.length > 0);
+}
+
+function normalizeApiSections(sections: NavSection[]): NavSection[] {
+  const idToLabel: Record<string, string> = {
+    "start-here": "Start Here",
+    "core-modules": "Core Modules",
+    api: "API Layer",
+    auth: "Authentication",
+    database: "Database",
+    config: "Configuration",
+    overview: "Start Here",
+    architecture: "Start Here",
+    "key-modules": "Core Modules",
+    data: "Database"
+  };
+  const toNormalizedId = (id: string): string => {
+    if (NAV_SECTION_ORDER.includes(id as (typeof NAV_SECTION_ORDER)[number])) return id;
+    switch (id) {
+      case "overview":
+      case "architecture":
+        return "start-here";
+      case "key-modules":
+        return "core-modules";
+      case "data":
+        return "database";
+      default:
+        return id;
+    }
+  };
+  const byId = new Map<string, NavSection>();
+  for (const s of sections) {
+    const id = toNormalizedId(s.id);
+    const label = idToLabel[id] ?? s.label;
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, { id, label, description: s.description, paths: [...s.paths] });
+    } else {
+      existing.paths = [...new Set([...existing.paths, ...s.paths])];
+    }
+  }
+  return NAV_SECTION_ORDER.map((id) => byId.get(id)).filter(Boolean) as NavSection[];
 }
 
 export default function RepoNavigatorPanel({
@@ -117,7 +165,7 @@ export default function RepoNavigatorPanel({
       .then((res) => res.json())
       .then((data: { sections?: NavSection[] | null }) => {
         if (data.sections && data.sections.length > 0) {
-          setSections(data.sections);
+          setSections(normalizeApiSections(data.sections).filter((s) => s.paths.length > 0));
         } else {
           const lower = fileTree.map((p) => p.toLowerCase());
           setSections(heuristicSections(fileTree, lower));
@@ -134,12 +182,13 @@ export default function RepoNavigatorPanel({
     loadSections();
   }, [loadSections]);
 
-  const handleSectionClick = (section: NavSection) => {
-    const paths = section.paths;
-    if (paths.length === 0) return;
-    onHighlightFiles?.(paths);
-    onNavigateFile?.(paths[0]!);
+  const handleSectionToggle = (section: NavSection) => {
     setExpandedId((prev) => (prev === section.id ? null : section.id));
+    if (section.paths.length > 0) onHighlightFiles?.(section.paths);
+  };
+
+  const handleFileClick = (path: string) => {
+    onNavigateFile?.(path);
   };
 
   if (loading) {
@@ -168,11 +217,11 @@ export default function RepoNavigatorPanel({
 
   return (
     <section className="glass-panel space-y-3 border-slate-800/80 p-4">
-      <h2 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        Repo navigator
-      </h2>
-      <p className="text-[11px] text-slate-500">
-        Click a section to highlight related files and open the first one.
+<h2 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          Repo navigator
+        </h2>
+        <p className="text-[11px] text-slate-500">
+        AI-generated navigation. Click a file to open it in the code viewer.
       </p>
       <div className="space-y-2">
         {sections.map((section) => {
@@ -181,7 +230,7 @@ export default function RepoNavigatorPanel({
             <div key={section.id} className="rounded-lg border border-slate-800 bg-slate-950/60">
               <button
                 type="button"
-                onClick={() => handleSectionClick(section)}
+                onClick={() => handleSectionToggle(section)}
                 className="flex w-full items-center justify-between px-3 py-2 text-left transition hover:bg-slate-800/50"
               >
                 <div>
@@ -205,7 +254,7 @@ export default function RepoNavigatorPanel({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onNavigateFile?.(p);
+                            handleFileClick(p);
                           }}
                           className="block w-full truncate rounded px-2 py-1 text-left font-mono text-[10px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
                         >

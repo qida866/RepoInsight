@@ -4,12 +4,11 @@ import { CLAUDE_API_URL } from "@/lib/claude-api-constants";
 export const dynamic = "force-dynamic";
 
 const SECTION_IDS = [
-  "overview",
-  "architecture",
-  "key-modules",
+  "start-here",
+  "core-modules",
   "api",
-  "data",
   "auth",
+  "database",
   "config"
 ];
 
@@ -41,15 +40,14 @@ export async function POST(req: NextRequest) {
     const systemPrompt =
       "You are an expert at mapping codebases to a navigation guide. " +
       "Given a list of file paths from a repository, assign files to these sections: " +
-      "Overview (README, package.json, high-level docs), " +
-      "Architecture (top-level app/src/pages structure), " +
-      "Key Modules (components, services, features), " +
-      "API Layer (api/, routes/, controllers), " +
-      "Data Layer (models, db, prisma, migrations), " +
+      "Start Here (README, package.json, main entry points like app/page.tsx, src/main.tsx), " +
+      "Core Modules (app/, src/, pages/, components, services, features, lib), " +
+      "API Layer (app/api, pages/api, routes, controllers), " +
       "Authentication (auth, middleware, session, jwt), " +
+      "Database (models, db, prisma, migrations, schema), " +
       "Configuration (config, .env, settings). " +
-      "You MUST respond with valid JSON only: { \"sections\": [ { \"id\": \"overview\", \"label\": \"Overview\", \"description\": \"...\", \"paths\": [\"path/from/list\"] }, ... ] }. " +
-      "Use only these ids: overview, architecture, key-modules, api, data, auth, config. " +
+      "You MUST respond with valid JSON only: { \"sections\": [ { \"id\": \"start-here\", \"label\": \"Start Here\", \"description\": \"...\", \"paths\": [\"path/from/list\"] }, ... ] }. " +
+      "Use only these ids: start-here, core-modules, api, auth, database, config. " +
       "Every path in each section's \"paths\" array MUST appear in the file list you were given. " +
       "Include only sections that have at least one file. " +
       "Keep descriptions to one short sentence.";

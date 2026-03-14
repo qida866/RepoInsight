@@ -5,6 +5,7 @@ import { toPng } from "html-to-image";
 import type { AnalyzeResult } from "@/types/analyze";
 import { getDetectedLayerLabels } from "@/components/repo/ArchitectureMapPanel";
 import ShareAnalysisButton from "@/components/repo/ShareAnalysisButton";
+import StarRepoButton from "@/components/repo/StarRepoButton";
 import SharePreviewCard from "@/components/repo/SharePreviewCard";
 
 const SUMMARY_MAX_CHARS = 160;
@@ -80,6 +81,11 @@ export default function RepoResultHeader({ result, showShareButton = true }: Rep
               </a>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <StarRepoButton
+                owner={result.owner}
+                repo={result.repo}
+                name={result.name}
+              />
               {showShareButton && (
                 <ShareAnalysisButton owner={result.owner} repo={result.repo} />
               )}

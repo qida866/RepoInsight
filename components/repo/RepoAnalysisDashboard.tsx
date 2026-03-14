@@ -10,6 +10,7 @@ import TechStackPanel from "@/components/repo/TechStackPanel";
 import RepoIntelligencePanel from "@/components/repo/RepoIntelligencePanel";
 import ArchitectureSummaryPanel from "@/components/repo/ArchitectureSummaryPanel";
 import ArchitectureMapPanel, { getLayerForPath, type LayerId } from "@/components/repo/ArchitectureMapPanel";
+import ArchitectureGraphPanel from "@/components/repo/ArchitectureGraphPanel";
 import KeyFilesPanel from "@/components/repo/KeyFilesPanel";
 import FileIntelligencePanel from "@/components/repo/FileIntelligencePanel";
 import EntryPointsPanel from "@/components/repo/EntryPointsPanel";
@@ -26,6 +27,8 @@ import RepoNavigatorPanel from "@/components/repo/RepoNavigatorPanel";
 import ArchitectureHeatmap from "@/components/repo/ArchitectureHeatmap";
 import RepoSearchPanel from "@/components/repo/RepoSearchPanel";
 import RepoResultHeader from "@/components/repo/RepoResultHeader";
+import RepoHealthScore from "@/components/repo/RepoHealthScore";
+import { buildRepoKnowledge } from "@/lib/repoKnowledge";
 
 const RepoGraph = dynamic(() => import("@/components/repo/RepoGraph"), {
   ssr: false
@@ -124,6 +127,8 @@ export default function RepoAnalysisDashboard({ result, showShareButton = true }
       ? `// Repo: ${result.name}\n// AI Summary:\n// ${result.summary}`
       : "// Code preview\n// Analyze a repository to see AI insights here.");
 
+  const repoKnowledge = useMemo(() => buildRepoKnowledge(result), [result]);
+
   const entryPointCandidates = (result.fileTree ?? []).filter((p) => {
     const lower = p.toLowerCase();
     return (
@@ -203,6 +208,14 @@ export default function RepoAnalysisDashboard({ result, showShareButton = true }
         techStack={result.techStack ?? []}
       />
 
+      <section className="glass-panel">
+        <RepoHealthScore
+          fileTree={result.fileTree}
+          owner={result.owner}
+          repo={result.repo}
+        />
+      </section>
+
       <RepoNavigatorPanel
         fileTree={result.fileTree}
         name={result.name}
@@ -219,6 +232,12 @@ export default function RepoAnalysisDashboard({ result, showShareButton = true }
         fileTree={result.fileTree}
         selectedLayerId={selectedLayerId}
         onLayerClick={handleArchitectureLayerClick}
+        onSelectFile={handleSelectFile}
+      />
+
+      <ArchitectureGraphPanel
+        analysis={{ fileTree: fileTreeNodes }}
+        onHighlightPaths={setHighlightedPaths}
         onSelectFile={handleSelectFile}
       />
 
@@ -402,10 +421,14 @@ export default function RepoAnalysisDashboard({ result, showShareButton = true }
           </div>
 
           <RepoChatPanel
+            knowledge={repoKnowledge}
             name={result.name}
             description={result.description}
+            summary={result.summary}
             techStack={result.techStack ?? []}
             fileTree={result.fileTree}
+            entrypoints={entryPointCandidates}
+            onSelectFile={handleSelectFile}
           />
           <RepoCopilotPanel
             owner={result.owner}

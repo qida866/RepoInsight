@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { RepoAnalysis } from "@/types/repo";
+import { addRecentRepo } from "@/lib/recentRepos";
 import RepoHeader from "./RepoHeader";
 import RepoSummaryPanel from "./RepoSummaryPanel";
 import LearningPathPanel from "./LearningPathPanel";
@@ -17,6 +18,7 @@ export default function RepoAnalysisShell({ owner, name }: Props) {
   const [data, setData] = useState<RepoAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [highlightedPaths, setHighlightedPaths] = useState<string[] | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -34,6 +36,7 @@ export default function RepoAnalysisShell({ owner, name }: Props) {
         }
         const json = (await res.json()) as RepoAnalysis;
         setData(json);
+        addRecentRepo(owner, name, json.repo?.name ?? name);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Unexpected error occurred"
@@ -85,9 +88,15 @@ export default function RepoAnalysisShell({ owner, name }: Props) {
           <RepoSummaryPanel analysis={data} />
           <LearningPathPanel analysis={data} />
         </div>
-        <FileTreePanel analysis={data} />
+        <FileTreePanel
+          analysis={data}
+          highlightedPaths={highlightedPaths}
+        />
       </div>
-      <ArchitectureGraphPanel analysis={data} />
+      <ArchitectureGraphPanel
+        analysis={data}
+        onHighlightPaths={setHighlightedPaths}
+      />
     </div>
   );
 }

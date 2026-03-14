@@ -1,4 +1,7 @@
+"use client";
+
 import type { RepoAnalysis } from "@/types/repo";
+import StarRepoButton from "./StarRepoButton";
 
 interface Props {
   analysis: RepoAnalysis;
@@ -34,6 +37,11 @@ export default function RepoHeader({ analysis }: Props) {
           >
             View on GitHub
           </a>
+          <StarRepoButton
+            owner={repo.owner}
+            repo={repo.name}
+            name={repo.name}
+          />
         </div>
       </div>
       <div className="flex flex-wrap gap-2">

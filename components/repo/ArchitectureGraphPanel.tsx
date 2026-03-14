@@ -1,133 +1,220 @@
 "use client";
 
 import type { RepoAnalysis, FileNode } from "@/types/repo";
-import { Background, Controls, ReactFlow, MiniMap } from "@xyflow/react";
+import {
+  Background,
+  Controls,
+  ReactFlow,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  type Node,
+  type Edge,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+export type ArchitectureGraphLayerId = "frontend" | "api" | "backend" | "database";
 
 interface Props {
-  analysis: RepoAnalysis;
+  /** At least fileTree (FileNode[]) is required. Full RepoAnalysis is used in RepoAnalysisShell. */
+  analysis: RepoAnalysis | { fileTree: FileNode[] };
+  /** When a layer node is clicked, call with that layer's file paths (sync with FileExplorer). */
+  onHighlightPaths?: (paths: string[]) => void;
+  /** Optional: when a layer is clicked, open the first file in the code viewer. */
+  onSelectFile?: (path: string) => void;
+  /** Externally controlled: which node is highlighted (e.g. from FileExplorer selection). */
+  highlightedNodeId?: ArchitectureGraphLayerId | null;
 }
 
-export default function ArchitectureGraphPanel({ analysis }: Props) {
-  const allPaths = useMemo(() => {
-    const paths: string[] = [];
-    const walk = (node: FileNode) => {
-      if (node.type === "file") {
-        paths.push(node.path.toLowerCase());
-      }
-      node.children?.forEach(walk);
-    };
-    analysis.fileTree.forEach(walk);
-    return paths;
-  }, [analysis.fileTree]);
+const LAYER_ORDER: ArchitectureGraphLayerId[] = [
+  "frontend",
+  "api",
+  "backend",
+  "database",
+];
 
-  const hasAny = (predicates: ((p: string) => boolean)[]): boolean =>
-    allPaths.some((p) => predicates.some((fn) => fn(p)));
+function collectFilePaths(tree: FileNode[]): string[] {
+  const paths: string[] = [];
+  const walk = (node: FileNode) => {
+    if (node.type === "file") paths.push(node.path);
+    node.children?.forEach(walk);
+  };
+  tree.forEach(walk);
+  return paths;
+}
+
+function buildLayerToPaths(filePaths: string[]): Record<ArchitectureGraphLayerId, string[]> {
+  const lower = filePaths.map((p) => p.toLowerCase());
+  const layerPaths: Record<ArchitectureGraphLayerId, string[]> = {
+    frontend: [],
+    api: [],
+    backend: [],
+    database: [],
+  };
+  filePaths.forEach((path, i) => {
+    const p = lower[i]!;
+    if (
+      p.startsWith("app/") ||
+      p.startsWith("pages/") ||
+      p.includes("components/") ||
+      p.endsWith(".tsx") ||
+      p.endsWith(".jsx")
+    ) {
+      if (!p.startsWith("app/api") && !p.startsWith("pages/api") && !p.includes("/api/"))
+        layerPaths.frontend.push(path);
+    }
+    if (
+      p.includes("/api/") ||
+      p.startsWith("app/api") ||
+      p.startsWith("pages/api")
+    ) {
+      layerPaths.api.push(path);
+    }
+    if (
+      p.includes("server/") ||
+      p.includes("backend/") ||
+      p.includes("controllers/") ||
+      p.endsWith(".go") ||
+      p.endsWith(".py") ||
+      p.endsWith(".rb")
+    ) {
+      layerPaths.backend.push(path);
+    }
+    if (
+      p.includes("prisma/") ||
+      p.includes("migrations/") ||
+      p.includes("db/") ||
+      p.endsWith(".sql")
+    ) {
+      layerPaths.database.push(path);
+    }
+  });
+  return layerPaths;
+}
+
+const NODE_BASE = {
+  borderRadius: 999,
+  paddingInline: 14,
+  paddingBlock: 8,
+  border: "1px solid rgb(56 189 248)",
+  background: "rgba(15,23,42,0.9)",
+  color: "rgb(226 232 240)",
+  fontSize: 12,
+  boxShadow: "0 18px 40px rgba(15,23,42,0.75)",
+};
+const NODE_SELECTED = {
+  ...NODE_BASE,
+  border: "2px solid rgb(56 189 248)",
+  background: "rgba(30,58,138,0.4)",
+  boxShadow: "0 0 24px rgba(56,189,248,0.4)",
+};
+
+export default function ArchitectureGraphPanel({
+  analysis,
+  onHighlightPaths,
+  onSelectFile,
+  highlightedNodeId,
+}: Props) {
+  const [selectedId, setSelectedId] = useState<ArchitectureGraphLayerId | null>(null);
+
+  const filePaths = useMemo(
+    () => collectFilePaths(analysis.fileTree),
+    [analysis.fileTree]
+  );
+  const layerToPaths = useMemo(() => buildLayerToPaths(filePaths), [filePaths]);
 
   const layerPresence = useMemo(() => {
-    const frontend = hasAny([
-      (p) => p.startsWith("app/"),
-      (p) => p.startsWith("pages/"),
-      (p) => p.includes("components/"),
-      (p) => p.endsWith(".tsx"),
-      (p) => p.endsWith(".jsx")
-    ]);
-    const api = hasAny([
-      (p) => p.includes("/api/"),
-      (p) => p.startsWith("app/api"),
-      (p) => p.startsWith("pages/api")
-    ]);
-    const backend = hasAny([
-      (p) => p.includes("server/"),
-      (p) => p.includes("backend/"),
-      (p) => p.includes("controllers/"),
-      (p) => p.endsWith(".go"),
-      (p) => p.endsWith(".py"),
-      (p) => p.endsWith(".rb")
-    ]);
-    const database = hasAny([
-      (p) => p.includes("prisma/"),
-      (p) => p.includes("migrations/"),
-      (p) => p.includes("db/"),
-      (p) => p.endsWith(".sql")
-    ]);
-    return { frontend, api, backend, database };
-  }, [allPaths]);
+    const keys = LAYER_ORDER.filter((id) => layerToPaths[id].length > 0);
+    return keys;
+  }, [layerToPaths]);
 
-  const nodes = useMemo(() => {
+  const initialNodes = useMemo((): Node[] => {
     const baseY = 120;
     const gapX = 180;
-
-    const makeNode = (id: string, label: string, index: number) => ({
+    return layerPresence.map((id, index) => ({
       id,
-      data: { label },
+      data: {
+        label: id.charAt(0).toUpperCase() + id.slice(1),
+        pathCount: layerToPaths[id].length,
+      },
       position: { x: 60 + index * gapX, y: baseY },
-      style: {
-        borderRadius: 999,
-        paddingInline: 14,
-        paddingBlock: 8,
-        border: "1px solid rgb(56 189 248)",
-        background: "rgba(15,23,42,0.9)",
-        color: "rgb(226 232 240)",
-        fontSize: 12,
-        boxShadow: "0 18px 40px rgba(15,23,42,0.75)"
-      }
-    });
+      style: NODE_BASE,
+    }));
+  }, [layerPresence, layerToPaths]);
 
-    const result: any[] = [];
-    let index = 0;
-    if (layerPresence.frontend)
-      result.push(makeNode("frontend", "Frontend", index++));
-    if (layerPresence.api) result.push(makeNode("api", "API", index++));
-    if (layerPresence.backend)
-      result.push(makeNode("backend", "Backend", index++));
-    if (layerPresence.database)
-      result.push(makeNode("database", "Database", index++));
-
-    return result;
+  const initialEdges = useMemo((): Edge[] => {
+    const e: Edge[] = [];
+    for (let i = 0; i < layerPresence.length - 1; i++) {
+      const source = layerPresence[i]!;
+      const target = layerPresence[i + 1]!;
+      e.push({
+        id: `${source}->${target}`,
+        source,
+        target,
+        animated: true,
+        style: { stroke: "rgb(56 189 248)", strokeWidth: 1.5 },
+        label: "depends on",
+        labelStyle: { fill: "#94a3b8", fontSize: 9 },
+        labelBgStyle: { fill: "#0f172a" },
+        labelBgPadding: [4, 2] as [number, number],
+        labelBgBorderRadius: 4,
+      });
+    }
+    return e;
   }, [layerPresence]);
 
-  const edges = useMemo(
-    () => {
-      const e: any[] = [];
-      const addEdge = (source: string, target: string) => {
-        if (!nodes.find((n) => n.id === source) || !nodes.find((n) => n.id === target)) {
-          return;
-        }
-        e.push({
-          id: `${source}->${target}`,
-          source,
-          target,
-          animated: true,
-          style: { stroke: "rgb(56 189 248)", strokeWidth: 1.5 }
-        });
-      };
+  const layerKey = layerPresence.join(",");
+  const initialRef = useRef({ initialNodes, initialEdges });
+  initialRef.current = { initialNodes, initialEdges };
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-      // Example flow: Frontend -> API -> Backend -> Database
-      addEdge("frontend", "api");
-      addEdge("api", "backend");
-      addEdge("backend", "database");
+  const effectiveHighlight = highlightedNodeId ?? selectedId;
 
-      return e;
+  useEffect(() => {
+    setNodes(initialRef.current.initialNodes);
+    setEdges(initialRef.current.initialEdges);
+  }, [layerKey, setNodes, setEdges]);
+
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        style: n.id === effectiveHighlight ? NODE_SELECTED : NODE_BASE,
+      }))
+    );
+  }, [effectiveHighlight, setNodes]);
+
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const id = node.id as ArchitectureGraphLayerId;
+      if (!LAYER_ORDER.includes(id)) return;
+      const paths = layerToPaths[id] ?? [];
+      setSelectedId(id);
+      onHighlightPaths?.(paths);
+      if (paths.length > 0 && onSelectFile) onSelectFile(paths[0]!);
     },
-    [nodes]
+    [layerToPaths, onHighlightPaths, onSelectFile]
   );
 
   return (
     <section className="glass-panel h-[420px] border-slate-800/80 p-3">
       <div className="mb-2 flex items-center justify-between px-1">
         <h2 className="text-sm font-semibold text-slate-100">
-          Architecture Visualization
+          Architecture graph
         </h2>
         <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-          React Flow
+          Click a node to highlight related files · Module dependencies
         </span>
       </div>
       <div className="h-full rounded-xl border border-slate-800 bg-slate-950/80">
         <ReactFlow
           nodes={nodes}
           edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
           fitView
           fitViewOptions={{ padding: 0.4 }}
           defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}

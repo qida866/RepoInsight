@@ -1,0 +1,41 @@
+{
+  "owner": "vercel",
+  "repo": "next.js",
+  "name": "next.js",
+  "description": "The React Framework – used in production by thousands of companies worldwide.",
+  "stars": 120000,
+  "language": "TypeScript",
+  "fileTree": [
+    "package.json",
+    "tsconfig.json",
+    "next.config.js",
+    "README.md",
+    "app/layout.tsx",
+    "app/page.tsx",
+    "app/globals.css",
+    "app/favicon.ico",
+    "app/api/route.ts",
+    "components/ui/button.tsx",
+    "components/ui/card.tsx",
+    "lib/utils.ts",
+    "pages/_app.tsx",
+    "pages/_document.tsx",
+    "pages/index.tsx",
+    "pages/api/hello.ts",
+    "styles/globals.css",
+    "public/next.svg",
+    "public/vercel.svg",
+    "jest.config.js",
+    ".eslintrc.json",
+    "next-env.d.ts"
+  ],
+  "techStack": ["Next.js", "React", "TypeScript", "Node.js"],
+  "summary": "Next.js is the React framework for production. It offers hybrid static & server rendering, TypeScript support, smart bundling, and incremental static regeneration.",
+  "explanation": "The repo is organized with app/ (App Router) and pages/ (Pages Router) support. Key entry points are app/layout.tsx and app/page.tsx. Configuration lives in next.config.js and TypeScript in tsconfig.json.",
+  "learningPath": [
+    "Start with app/page.tsx and app/layout.tsx to see the root UI",
+    "Explore app/api/ for API routes and server actions",
+    "Check next.config.js for build and runtime options",
+    "Review components/ for reusable UI patterns"
+  ]
+}

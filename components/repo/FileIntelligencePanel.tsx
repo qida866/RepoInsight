@@ -17,6 +17,28 @@ interface IntelligenceData {
   architectureRole?: string;
 }
 
+function Section({
+  title,
+  content,
+  placeholder
+}: {
+  title: string;
+  content?: string | null;
+  placeholder: string;
+}) {
+  const text = (content?.trim() || "").replace(/^[-—]\s*$/, "") ? content : null;
+  return (
+    <div>
+      <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        {title}
+      </h3>
+      <p className="whitespace-pre-wrap text-slate-200">
+        {text ?? <span className="text-slate-500 italic">{placeholder}</span>}
+      </p>
+    </div>
+  );
+}
+
 export default function FileIntelligencePanel({
   code,
   path,
@@ -116,41 +138,26 @@ export default function FileIntelligencePanel({
 
       {!loading && data && (
         <div className="flex flex-col gap-4 text-xs">
-          {data.purpose && (
-            <div>
-              <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Purpose
-              </h3>
-              <p className="whitespace-pre-wrap text-slate-200">{data.purpose}</p>
-            </div>
-          )}
-          {data.mainFunctions && (
-            <div>
-              <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Main functions
-              </h3>
-              <p className="whitespace-pre-wrap text-slate-200">{data.mainFunctions}</p>
-            </div>
-          )}
-          {data.dependencies && (
-            <div>
-              <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Dependencies
-              </h3>
-              <p className="whitespace-pre-wrap text-slate-200">{data.dependencies}</p>
-            </div>
-          )}
-          {data.architectureRole && (
-            <div>
-              <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Role in architecture
-              </h3>
-              <p className="whitespace-pre-wrap text-slate-200">{data.architectureRole}</p>
-            </div>
-          )}
-          {!data.purpose && !data.mainFunctions && !data.dependencies && !data.architectureRole && (
-            <p className="text-slate-500">No explanation generated for this file.</p>
-          )}
+          <Section
+            title="Purpose"
+            content={data.purpose}
+            placeholder="What this file is for and its role in the codebase."
+          />
+          <Section
+            title="Main functions"
+            content={data.mainFunctions}
+            placeholder="Key functions, components, classes, or exports."
+          />
+          <Section
+            title="Dependencies"
+            content={data.dependencies}
+            placeholder="Imports and what depends on this file."
+          />
+          <Section
+            title="Role in architecture"
+            content={data.architectureRole}
+            placeholder="How it fits in the overall architecture."
+          />
         </div>
       )}
     </section>

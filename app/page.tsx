@@ -2,8 +2,11 @@
 
 import { FormEvent, useState } from "react";
 import type { AnalyzeResult } from "@/types/analyze";
+import { addRecentRepo } from "@/lib/recentRepos";
 import RepoAnalysisDashboard from "@/components/repo/RepoAnalysisDashboard";
 import FeaturedRepos from "@/components/landing/FeaturedRepos";
+import SavedRepos from "@/components/landing/SavedRepos";
+import RecentRepos from "@/components/landing/RecentRepos";
 
 function parseGithubUrl(input: string): { owner: string; repo: string } | null {
   try {
@@ -71,6 +74,7 @@ export default function LandingPage() {
         }
         const json = (await res.json()) as AnalyzeResult;
         setResult(json);
+        addRecentRepo(json.owner, json.repo, json.name);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Unexpected error occurred"
@@ -140,6 +144,10 @@ export default function LandingPage() {
         </form>
 
         <FeaturedRepos />
+
+        <SavedRepos />
+
+        <RecentRepos />
 
         {loading && !result && (
           <div className="mt-8 space-y-4 text-left text-sm text-slate-200">

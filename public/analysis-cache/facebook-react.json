@@ -1,0 +1,35 @@
+{
+  "owner": "facebook",
+  "repo": "react",
+  "name": "react",
+  "description": "The library for web and native user interfaces.",
+  "stars": 220000,
+  "language": "JavaScript",
+  "fileTree": [
+    "package.json",
+    "README.md",
+    "packages/react/package.json",
+    "packages/react/index.js",
+    "packages/react/src/React.js",
+    "packages/react-dom/package.json",
+    "packages/react-dom/index.js",
+    "packages/react-dom/client.js",
+    "packages/scheduler/package.json",
+    "packages/shared/package.json",
+    "scripts/rollup/build.js",
+    "scripts/jest/jest.config.js",
+    "fixtures/package.json",
+    "flow-typed",
+    ".eslintrc.js",
+    "LICENSE"
+  ],
+  "techStack": ["React", "JavaScript", "Flow", "Jest"],
+  "summary": "React is a JavaScript library for building user interfaces. It uses a component-based model and a virtual DOM for efficient updates.",
+  "explanation": "The repo is a monorepo with packages/react (core), packages/react-dom (DOM renderer), and packages/scheduler. Entry points are in packages/react and packages/react-dom. Build and test scripts live in scripts/.",
+  "learningPath": [
+    "Read packages/react/src/React.js for the core API",
+    "Explore packages/react-dom for browser rendering",
+    "Check packages/scheduler for the concurrent scheduler",
+    "Run fixtures/ for usage examples"
+  ]
+}
